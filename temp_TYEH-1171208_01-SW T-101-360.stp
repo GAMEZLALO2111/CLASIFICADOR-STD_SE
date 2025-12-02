@@ -1,0 +1,71 @@
+TYEE IKEA 4AI - SETTING INFORMATION
+
+DRAWING NAME      : TYEH-1171208_01-SW T-101-360
+DWG ISSUE         : 1
+
+DWG DIRECTORY     : \\gdlnt014\RADANFILES\PROGRAMMING\TYEE\TYEE Stonehenge Rack\ESTANDAR 360
+
+DATE              : Mon Nov 24 13:33:46 2025
+
+MATERIAL          : TYEH-FGN0870-G30 0.075
+THICKNESS         : 0.075 in
+SHEET SIZE        : 82 x 36 in
+
+CLAMP POSITIONS   : 1) 5 in   2) 73 in   3) Not used  
+
+
+
+TOOL LIST
+
+TOOL   TYPE                 SIZE             RADS    ANGLE   DIE/CL EHL   Tool No.
+
+ 202  RECTANGULAR       1.750 x   0.156 in    -        -       -     -  31750.156
+ 204  CIRCULAR          0.220 in dia          -        -       -     -  10220
+ 305  4 WAY R 0.078"    0.250 x   0.250 in    -        -       -     -  72079.25
+ 106  RECTANGULAR       0.500 x   0.080 in    -        -       -     -  30500.08
+ 307  Csk FD 120        0.431 x   0.220 in    -        -       -     -  62431.2201
+ 108  RECTANGULAR       0.492 x   0.394 in    -        -       -     -  30492.394
+ 110  RECTANGULAR       0.787 x   0.492 in    -      90.000    -     -  30787.492
+ 112  CIRCULAR          0.437 in dia          -        -       -     -  10437
+ 213  CIRCULAR          0.213 in dia          -        -       -     -  10213
+ 314  OBROUND           0.375 x   0.266 in   0.133     -       -     -  40375.266
+ 216  RECTANGULAR       1.750 x   0.250 in    -      90.000    -     -  31750.25
+ 117s CIRCULAR          0.281 in dia          -        -       -     -  10281
+ 218s redondo           0.345 in dia          -        -       -     -  10345
+ 319  OBROUND           0.354 x   0.254 in   0.127     -       -     -  40354.254
+ 321  Custom Shape      0.472 x   0.593 in    -        -       -     -  53512.35
+ 325s DASH LINE FD      0.250 x   0.010 in    -      90.000    -     -  74250.1
+ 227  CIRCULAR          0.238 in dia          -        -       -     -  10238
+ 328  RECTANGULAR       0.187 x   0.091 in    -      90.000    -     -  30187.091
+ 231s SQUARE            1.000 x   1.000 in    -        -       -     -  21000
+ 233s CIRCULAR          0.270 in dia          -        -       -     -  10270
+ 334  CIRCULAR          0.328 in dia          -        -       -     -  10328
+ 137  RECTANGLE         0.500 x   0.110 in    -      90.000    -     -  30500.11
+ 141  OBROUND           0.450 x   0.300 in   0.150     -       -     -  40450.3
+ 242  CIRCULAR          0.248 in dia          -        -       -     -  10248
+ 247s CIRCULAR          0.230 in dia          -        -       -     -  10230
+ 348s CIRCULAR          0.252 in dia          -        -       -     -  10252
+ 350s RECTANGULAR       0.250 x   0.100 in    -        -       -     -  30250.1
+ 151  Dash FD           1.250 x   0.010 in    -      90.000    -     -  76125.1
+ 153  Csk FD 90°        0.360 x   0.230 in    -        -       -     -  69360.2301
+ 155s CIRCULAR          0.256 in dia          -        -       -     -  10256
+ 256  CIRCULAR          0.276 in dia          -        -       -     -  10276
+ 357  SQUARE            0.079 x   0.079 in    -      45.000    -     -  20079
+ 258  Stamp FD          3.000 x   0.250 in    -      90.000    -     -  93000.1
+
+
+
+EXTRA NOTES
+
+Number of Components: \\gdlnt014\RADANFILES\PROGRAMMING\TYEE\TYEE Stonehenge Rack\Storage Rack\Symbol\1171208 A.sym = 1
+Number of sheets required: 1
+Sheet Utilisation: 66.2 %
+RL OBROUND 40450.3 (2X)
+TN93000.1 1171208 A FLG YyWw (Año-Semana)
+TN62431.2201 Csk FD 0.220x0.430x120deg
+TN69360.2301 Csk FD 0.360x0.230x90deg
+*NO LLEVA MICROFILM*
+**UTILIZAR COROPLAST ENTRE TARIMA Y PRIMER PIEZA Y FOAM UN LA ULTIMA PIEZA**
+***REALIZAR APILADO DE PIEZAS ENTRE DOS PERSONAS Y COLOCARLAS CON LOS CSK HACIA ABAJO***
+Standard tool file: T-101_STD_360
+RUN TIME  Sheet : 560 secs = 9.34 mins = 0 hours 9 mins 20 secs
