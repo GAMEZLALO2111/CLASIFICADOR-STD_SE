@@ -11,10 +11,13 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Importar modelos
+from backend.app.models.machine_template_model import MachineTemplate
+from backend.app.models.machine_model import Machine
+from backend.app.models.package_model import Package
+from backend.app.models.package_part_model import PackagePart
+
 # Crear tablas
-from backend.app.models.fg_model import FinishGood
-from backend.app.models.fg_parts_model import FGPart
-from backend.app.models.setup_model import Setup
 Base.metadata.create_all(bind=engine)
 
 def get_db():
