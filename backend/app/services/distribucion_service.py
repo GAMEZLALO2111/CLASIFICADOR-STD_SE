@@ -5,6 +5,11 @@ from app.models.distribucion_model import *
 from typing import List, Dict, Tuple
 from collections import defaultdict, Counter
 import json
+from app.utils.algoritmo_asignacion import (
+    asignar_optimizado_final,
+    generar_reporte_asignacion,
+    calcular_carga_maquina
+)
 
 
 def agrupar_parts_por_preferencias(requerimientos: Dict) -> List[Dict]:
@@ -531,25 +536,50 @@ def generar_estilo(herramientas_unificadas: Dict, machine: Machine) -> Tuple[Lis
             )
             estilo.append(estilo_item)
     
+    # Importar función para detectar redondos
+    from app.utils.algoritmo_asignacion import es_redondo
+    
     # Luego asignar resto de herramientas respetando tipo y guía
     for tool_data in herramientas_unicas:
         if tool_data["es_autoindex"]:
             continue  # Ya asignada
         
         tn = tool_data["tool_number"]
+        es_herramienta_redonda = es_redondo(tn)
         
         # Buscar estación compatible
         station_asignada = None
-        for est, config in estaciones_disponibles.items():
-            if est in estaciones_asignadas:
-                continue  # Ya ocupada
+        
+        if es_herramienta_redonda:
+            # REDONDOS: Flexibles con guía, PRIORIZAR estaciones sin guía
+            # Prioridad 1: Buscar estación SIN guía del tipo correcto
+            for est, config in estaciones_disponibles.items():
+                if est in estaciones_asignadas:
+                    continue
+                if config["tipo"] == tool_data["tipo_estacion"] and config["tiene_guia"] == False:
+                    station_asignada = est
+                    estaciones_asignadas.add(est)
+                    break
             
-            # Debe coincidir tipo y guía
-            if (config["tipo"] == tool_data["tipo_estacion"] and
-                config["tiene_guia"] == tool_data["requiere_guia"]):
-                station_asignada = est
-                estaciones_asignadas.add(est)
-                break
+            # Prioridad 2: Si no hay sin guía, usar CON guía
+            if not station_asignada:
+                for est, config in estaciones_disponibles.items():
+                    if est in estaciones_asignadas:
+                        continue
+                    if config["tipo"] == tool_data["tipo_estacion"] and config["tiene_guia"] == True:
+                        station_asignada = est
+                        estaciones_asignadas.add(est)
+                        break
+        else:
+            # NO REDONDOS: Debe coincidir tipo Y guía exactamente
+            for est, config in estaciones_disponibles.items():
+                if est in estaciones_asignadas:
+                    continue
+                if (config["tipo"] == tool_data["tipo_estacion"] and
+                    config["tiene_guia"] == tool_data["requiere_guia"]):
+                    station_asignada = est
+                    estaciones_asignadas.add(est)
+                    break
         
         estilo_item = EstiloEstacion(
             estacion=station_asignada if station_asignada else "SIN_ASIGNAR",
@@ -670,3 +700,229 @@ def generar_resumen(
         "eficiencia_promedio": round((total_horas_usadas / (len(asignaciones) * horas_objetivo) * 100) if asignaciones else 0, 1),
         "total_parts_distintos": total_parts_procesados
     }
+
+
+def crear_distribucion_optimizada(
+    db: Session,
+    package_id: int,
+    demanda: int,
+    horas_objetivo: float,
+    machine_ids: List[int]
+) -> DistribucionResponse:
+    """
+    Algoritmo optimizado de distribución usando compatibilidad, UPH y minimización de máquinas.
+    Esta es la versión mejorada que reemplaza la lógica antigua.
+    """
+    
+    # 1. Obtener package y validar
+    package = db.query(Package).filter(Package.id == package_id).first()
+    if not package:
+        raise ValueError(f"Package {package_id} no encontrado")
+    
+    if not package.parts or len(package.parts) == 0:
+        raise ValueError(f"Package {package_id} no tiene parts")
+    
+    # 2. Obtener máquinas y validar
+    machines = db.query(Machine).filter(
+        Machine.id.in_(machine_ids),
+        Machine.activa == 1
+    ).all()
+    
+    if not machines:
+        raise ValueError("No hay máquinas activas disponibles")
+    
+    # 3. Calcular requerimientos totales
+    requerimientos = calcular_requerimientos(package, demanda)
+    
+    # 4. Aplicar reglas duras (filtrar máquinas incompatibles)
+    machines_compatibles = aplicar_reglas_duras(package, machines, requerimientos)
+    
+    if not machines_compatibles:
+        return DistribucionResponse(
+            package_id=package_id,
+            package_nombre=package.nombre,
+            demanda=demanda,
+            horas_objetivo=horas_objetivo,
+            asignaciones=[],
+            es_factible=False,
+            alertas_generales=[],
+            errores_generales=["No hay máquinas compatibles con las especificaciones del package"],
+            resumen={}
+        )
+    
+    # 5. Preparar datos para el algoritmo optimizado
+    partes_para_algoritmo = []
+    for req_id, req_data in requerimientos.items():
+        parte_dict = {
+            'part_id': req_id,
+            'part_number': req_data['part_number'],
+            'filename': req_data['filename'],
+            'quantity': req_data['cantidad_total'],
+            'uph': req_data['uph'],
+            'thickness': req_data['thickness'],
+            'sheet_size': req_data['sheet_size'],
+            'tools': req_data['tool_numbers'],
+            'stations': req_data['stations'],
+            'parsed_data': req_data['parsed_data']
+        }
+        partes_para_algoritmo.append(parte_dict)
+    
+    # 6. Ejecutar algoritmo optimizado con REGLA DURA de tiempo
+    asignaciones_optimizadas = asignar_optimizado_final(
+        partes=partes_para_algoritmo,
+        horas_objetivo=horas_objetivo,  # LÍMITE ABSOLUTO de tiempo
+        umbral_compatibilidad=70
+    )
+    
+    # 7. Convertir resultado del algoritmo al formato de AsignacionMaquina
+    asignaciones_response = []
+    machines_dict = {m.id: m for m in machines_compatibles}
+    
+    # Validar que haya suficientes máquinas
+    maquinas_necesarias = len(asignaciones_optimizadas)
+    if maquinas_necesarias > len(machines_compatibles):
+        return DistribucionResponse(
+            package_id=package_id,
+            package_nombre=package.nombre,
+            demanda=demanda,
+            horas_objetivo=horas_objetivo,
+            asignaciones=[],
+            es_factible=False,
+            alertas_generales=[],
+            errores_generales=[
+                f"❌ CAPACIDAD INSUFICIENTE: Se necesitan {maquinas_necesarias} máquinas, solo hay {len(machines_compatibles)} disponibles.",
+                "Solución: Añadir más máquinas, reducir demanda o aumentar horas objetivo."
+            ],
+            resumen={}
+        )
+    
+    for maq_num, partes_asignadas in asignaciones_optimizadas.items():
+        # Obtener máquina correspondiente
+        machine = machines_compatibles[maq_num - 1]
+        
+        # Crear asignaciones de parts
+        parts_asignados = []
+        herramientas_unificadas = {}
+        tiempo_total = 0.0
+        
+        for parte in partes_asignadas:
+            part_id = parte['part_id']
+            req_data = requerimientos[part_id]
+            
+            # Calcular horas de corrida
+            horas = parte['quantity'] / parte['uph'] if parte['uph'] > 0 else 0
+            tiempo_total += horas
+            
+            # Crear AsignacionPart
+            part_number_str = parte['part_number']
+            if isinstance(part_number_str, dict):
+                part_number_str = part_number_str.get("full", "N/A")
+            
+            asignacion_part = AsignacionPart(
+                part_filename=parte['filename'],
+                part_number=part_number_str,
+                cantidad_requerida=parte['quantity'],
+                cantidad_asignada=parte['quantity'],
+                horas_corrida=round(horas, 2),
+                estaciones_usadas=len(parte['stations']),
+                estaciones_unificadas=0  # Se calculará después
+            )
+            parts_asignados.append(asignacion_part)
+            
+            # Procesar herramientas para unificación
+            machine_data = {
+                "herramientas_unificadas": herramientas_unificadas,
+                "machine": machine,
+                "parts_asignados": parts_asignados,
+                "tiempo_usado": tiempo_total,
+                "alertas": [],
+                "errores": []
+            }
+            procesar_herramientas_part(
+                req_data,
+                machine_data,
+                machine,
+                part_number_str
+            )
+        
+        # Generar estilo
+        estilo, estilo_overflow = generar_estilo(herramientas_unificadas, machine)
+        
+        # Actualizar conteo de estaciones unificadas
+        for part in parts_asignados:
+            part.estaciones_unificadas = len(estilo)
+        
+        # Validación CRÍTICA de tiempo (REGLA DURA)
+        alertas = []
+        errores = []
+        
+        if tiempo_total > horas_objetivo:
+            errores.append(
+                f"❌ ERROR CRÍTICO: Tiempo asignado ({tiempo_total:.2f}h) excede límite ({horas_objetivo:.2f}h). "
+                f"Esto NO debería ocurrir - Bug en algoritmo."
+            )
+        elif tiempo_total > horas_objetivo * 0.95:
+            alertas.append(f"✅ Utilización óptima: {(tiempo_total/horas_objetivo)*100:.1f}% del tiempo disponible")
+        
+        # Validación de overflow de estaciones (REGLA BLANDA)
+        if len(estilo_overflow) > 10:
+            errores.append(f"⚠️ Overflow: {len(estilo_overflow)} herramientas fuera del estilo (excede tolerancia +10)")
+        elif len(estilo_overflow) > 0:
+            alertas.append(f"⚠️ {len(estilo_overflow)} herramientas en overflow (dentro de tolerancia +10)")
+        
+        asignacion = AsignacionMaquina(
+            machine_id=machine.id,
+            machine_nombre=machine.nombre,
+            tipo_maquina=machine.template.tipo_maquina,
+            parts_asignados=parts_asignados,
+            tiempo_total_usado=round(tiempo_total, 2),
+            tiempo_disponible=horas_objetivo,
+            tiempo_sobrante=round(horas_objetivo - tiempo_total, 2),
+            estilo=estilo,
+            estaciones_fuera_estilo=estilo_overflow,
+            alertas=alertas,
+            errores=errores
+        )
+        
+        asignaciones_response.append(asignacion)
+    
+    # 8. Evaluar factibilidad
+    es_factible, alertas_gen, errores_gen = evaluar_factibilidad(
+        asignaciones_response,
+        requerimientos,
+        horas_objetivo
+    )
+    
+    # 9. Generar resumen
+    resumen = generar_resumen(asignaciones_response, demanda, horas_objetivo)
+    
+    # 10. Crear respuesta
+    distribucion_response = DistribucionResponse(
+        package_id=package_id,
+        package_nombre=package.nombre,
+        demanda=demanda,
+        horas_objetivo=horas_objetivo,
+        asignaciones=asignaciones_response,
+        es_factible=es_factible,
+        alertas_generales=alertas_gen,
+        errores_generales=errores_gen,
+        resumen=resumen
+    )
+    
+    # 11. Guardar distribución en BD
+    from app.models.distribucion_storage_model import DistribucionStorage
+    
+    dist_storage = DistribucionStorage(
+        package_id=package_id,
+        package_nombre=package.nombre,
+        demanda=demanda,
+        horas_objetivo=horas_objetivo,
+        machine_ids=machine_ids,
+        resultado_json=json.loads(distribucion_response.model_dump_json()),
+        es_factible=es_factible
+    )
+    db.add(dist_storage)
+    db.commit()
+    db.refresh(dist_storage)
+    
+    return distribucion_response

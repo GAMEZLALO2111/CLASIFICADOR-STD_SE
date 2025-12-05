@@ -25,9 +25,16 @@ def crear_distribucion_endpoint(
     - Máquinas disponibles
     
     Retorna asignaciones optimizadas con estilos de herramientas.
+    
+    ALGORITMO OPTIMIZADO:
+    - Agrupa partes por compatibilidad (thickness, sheet_size, herramientas)
+    - Prioriza partes por UPH (más lentas primero)
+    - Redistribuye cuando hay sobrecarga sin compatibilidad
+    - Minimiza número de máquinas utilizadas
+    - Permite sobrecarga si hay alta compatibilidad (≥70 score)
     """
     try:
-        distribucion = distribucion_service.crear_distribucion(
+        distribucion = distribucion_service.crear_distribucion_optimizada(
             db=db,
             package_id=request.package_id,
             demanda=request.demanda,
