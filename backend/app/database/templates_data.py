@@ -23,9 +23,10 @@ TEMPLATE_45STA = {
 
 # ============== 4-INDEX ==============
 
-# Tipo A (18 estaciones)
+# Tipo A (24 estaciones)
 tipo_a_4i = [103, 204, 305, 112, 213, 314, 117, 218, 319, 126, 227, 328, 132, 233, 334, 141, 242, 343, 146, 247, 348, 155, 256, 357]
-sin_guia_a_4i = [204, 213, 218, 227, 233, 242, 247, 256]
+# Estaciones tipo A SIN GUÍA (dato crítico para asignación)
+sin_guia_a_4i = [202, 213, 218, 227, 233, 242, 247, 258]
 
 for est in tipo_a_4i:
     TEMPLATE_4I["estaciones_config"][str(est)] = {

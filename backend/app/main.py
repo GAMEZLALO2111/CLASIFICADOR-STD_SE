@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from backend.app.routers.machine_router import router as machine_router
 from backend.app.routers.package_router import router as package_router
+from backend.app.routers.distribucion_router import router as distribucion_router
 
 app = FastAPI(
     title="CLASIFICADOR STD - Sistema Experto",
@@ -13,3 +14,4 @@ def root():
 
 app.include_router(machine_router)
 app.include_router(package_router)
+app.include_router(distribucion_router)
