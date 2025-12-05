@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, JSON
-from backend.app.database.db import Base
+from app.database.db import Base
 
 class MachineTemplate(Base):
     __tablename__ = "machine_templates"

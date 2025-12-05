@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from backend.app.models.machine_model import Machine
-from backend.app.models.machine_template_model import MachineTemplate
+from app.models.machine_model import Machine
+from app.models.machine_template_model import MachineTemplate
 from typing import List, Optional
 
 def crear_machine(

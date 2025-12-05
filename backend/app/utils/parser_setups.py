@@ -81,35 +81,85 @@ def parse_setup(file_path: str):
         sheet_size = None
 
     # =========================================================
-    #   5) STATIONS & TOOL NUMBERS
+    #   5) STATIONS, TOOL NUMBERS & ANGLES
     # =========================================================
     stations = []
     tool_numbers = []
+    angles = []
+    tools_data = []  # Lista de dicts con info completa
 
     for line in content.split("\n"):
         line = line.strip()
         if not line:
             continue
 
-        # formato general: "201 ... 74500.2"
-        match = re.match(r'^(\d{3})[a-zA-Z]?\s+.+?(\d{4,6}(?:\.\d+)?)\s*$', line)
+        # ignorar encabezados
+        if "TOOL" in line.upper() and "TYPE" in line.upper():
+            continue
 
-        if match:
-            station = match.group(1)
-            tool_num = match.group(2)
-
-            # ignorar encabezados
-            if "TOOL" in line.upper() and "TYPE" in line.upper():
-                continue
-
-            # validar que el tool number sea razonable
-            if float(tool_num.split('.')[0]) >= 1000:
-                stations.append(station)
-                tool_numbers.append(tool_num)
+        # Buscar patrón: estación, tool number y ángulo
+        # Formato: "201 RECTANGULAR ... 90.000 ... 31750.156"
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        
+        # Primera columna debe ser estación (3 dígitos)
+        if not re.match(r'^\d{3}[a-zA-Z]?$', parts[0]):
+            continue
+        
+        station = re.match(r'^(\d{3})', parts[0]).group(1)
+        
+        # Buscar tool number (formato XXXXX.X o XXXXX)
+        tool_num = None
+        angle = None
+        
+        for i, part in enumerate(parts):
+            # Tool number: 4-6 dígitos con posible decimal
+            if re.match(r'^\d{4,6}(\.\d+)?$', part):
+                tool_num = part
+                
+                # Buscar ángulo antes del tool number
+                # Los ángulos suelen estar 1-3 posiciones antes
+                for j in range(max(0, i-5), i):
+                    if re.match(r'^\d+\.0+$', parts[j]):
+                        potential_angle = float(parts[j])
+                        if potential_angle in [0.0, 90.0, 180.0, 270.0, 45.0]:
+                            angle = potential_angle
+                            break
+                break
+        
+        # Validar y agregar
+        if tool_num and float(tool_num.split('.')[0]) >= 1000:
+            stations.append(station)
+            tool_numbers.append(tool_num)
+            angles.append(angle if angle is not None else 0.0)  # Default 0° si no se encuentra
+            
+            tools_data.append({
+                "station": station,
+                "tool_number": tool_num,
+                "angle": angle if angle is not None else 0.0
+            })
 
     # eliminar duplicados manteniendo orden
-    stations = list(dict.fromkeys(stations))
-    tool_numbers = list(dict.fromkeys(tool_numbers))
+    seen = set()
+    unique_stations = []
+    unique_tool_numbers = []
+    unique_angles = []
+    unique_tools_data = []
+    
+    for i, (st, tn) in enumerate(zip(stations, tool_numbers)):
+        key = f"{st}_{tn}"
+        if key not in seen:
+            seen.add(key)
+            unique_stations.append(st)
+            unique_tool_numbers.append(tn)
+            unique_angles.append(angles[i])
+            unique_tools_data.append(tools_data[i])
+    
+    stations = unique_stations
+    tool_numbers = unique_tool_numbers
+    angles = unique_angles
+    tools_data = unique_tools_data
 
     # =========================================================
     #   6) SYM  (Piezas por blank, NO es booleano)
@@ -141,6 +191,8 @@ def parse_setup(file_path: str):
         "sheet_size": sheet_size,
         "stations": stations,
         "tool_numbers": tool_numbers,
+        "angles": angles,
+        "tools_data": tools_data,  # Info completa con estación, TN y ángulo
         "sym": sym,
         "run_time_mins": run_time,
         "uph": uph

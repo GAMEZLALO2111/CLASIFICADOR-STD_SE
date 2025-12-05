@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, JSON
 from sqlalchemy.orm import relationship
-from backend.app.database.db import Base
+from app.database.db import Base
 
 class Machine(Base):
     __tablename__ = "machines"

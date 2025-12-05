@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from backend.app.models.package_model import Package
-from backend.app.models.package_part_model import PackagePart
+from app.models.package_model import Package
+from app.models.package_part_model import PackagePart
 from datetime import datetime
 from typing import List, Optional
 

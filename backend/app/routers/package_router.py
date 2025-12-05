@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from backend.app.database.db import get_db
-from backend.app.services import package_service
-from backend.app.utils.parser_setups import parse_setup
+from app.database.db import get_db
+from app.services import package_service
+from app.utils.parser_setups import parse_setup
 from typing import List
 import os
 import shutil
@@ -63,7 +63,7 @@ def actualizar_cantidades_package(
     cantidades debe ser JSON: {"1": 10, "2": 20} donde las keys son part_id
     """
     import json
-    from backend.app.models.package_part_model import PackagePart
+    from app.models.package_part_model import PackagePart
     
     # Verificar package existe
     package = package_service.obtener_package_por_id(db, package_id)
@@ -112,7 +112,7 @@ def eliminar_setup_de_package(
     db: Session = Depends(get_db)
 ):
     """Elimina un setup específico de un package"""
-    from backend.app.models.package_part_model import PackagePart
+    from app.models.package_part_model import PackagePart
     
     # Verificar package existe
     package = package_service.obtener_package_por_id(db, package_id)
@@ -179,7 +179,7 @@ async def agregar_setup_a_package(
     db: Session = Depends(get_db)
 ):
     """Agrega un setup (archivo .stp) a un package existente"""
-    from backend.app.models.package_part_model import PackagePart
+    from app.models.package_part_model import PackagePart
     
     # Verificar que el package existe
     package = package_service.obtener_package_por_id(db, package_id)

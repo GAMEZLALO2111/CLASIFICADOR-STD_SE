@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, JSON, ForeignKey
 from sqlalchemy.orm import relationship
-from backend.app.database.db import Base
+from app.database.db import Base
 
 class PackagePart(Base):
     __tablename__ = "package_parts"

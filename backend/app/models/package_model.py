@@ -1,7 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
-from backend.app.database.db import Base
+from app.database.db import Base
 
 class Package(Base):
     __tablename__ = "packages"

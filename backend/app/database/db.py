@@ -12,10 +12,12 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Importar modelos
-from backend.app.models.machine_template_model import MachineTemplate
-from backend.app.models.machine_model import Machine
-from backend.app.models.package_model import Package
-from backend.app.models.package_part_model import PackagePart
+from app.models.machine_template_model import MachineTemplate
+from app.models.machine_model import Machine
+from app.models.package_model import Package
+from app.models.package_part_model import PackagePart
+from app.models.distribucion_storage_model import DistribucionStorage
+from app.models.estilo_manual_model import EstiloManual
 
 # Crear tablas
 Base.metadata.create_all(bind=engine)
