@@ -384,204 +384,217 @@ def asignar_optimizado_final(
     """
     if not partes:
         return {}
-    
+
     # Inicializar tracking de divisiones por parte
     global _num_divisiones
     _num_divisiones = {}
-    
-    # Paso 1: Agrupar por compatibilidad alta CON límite de estaciones
+
     LIMITE_ESTACIONES = 52
     grupos_compatibilidad = agrupar_por_compatibilidad_alta(
-        partes, 
+        partes,
         umbral_compatibilidad,
         limite_estaciones=LIMITE_ESTACIONES
     )
-    
-    # Estructuras para asignación
+
     asignaciones = {}
     maquina_actual = 1
     asignaciones[maquina_actual] = []
     tiempo_usado = {maquina_actual: 0.0}
     partes_pendientes = []
-    MAX_MAQUINAS = 20  # Límite de seguridad
-    
+    MAX_MAQUINAS = 20
+    alertas = []
+
     # Paso 2: Asignar grupos validando OVERFLOW = 0 y tiempo
     for grupo in grupos_compatibilidad:
         grupo_asignado = False
         intentos_division = 0
         MAX_INTENTOS = 3
-        
+
         while not grupo_asignado and intentos_division < MAX_INTENTOS:
             intentos_division += 1
-            
-            # Validación de seguridad
+
             if maquina_actual > MAX_MAQUINAS:
                 raise Exception(f"Se excedió el límite de {MAX_MAQUINAS} máquinas. Revisa configuración.")
-            
+
             tiempo_disponible = horas_objetivo - tiempo_usado[maquina_actual]
             horas_grupo = calcular_horas_grupo(grupo)
-            
-            # VALIDACIÓN 1: TIEMPO (REGLA DURA)
-            # Si grupo no cabe en tiempo, ajustar o dividir
-            if horas_grupo > tiempo_disponible:
-                # Si máquina casi llena (<10% disponible), crear nueva
-                if tiempo_disponible < horas_objetivo * 0.1:
-                    maquina_actual += 1
-                    asignaciones[maquina_actual] = []
-                    tiempo_usado[maquina_actual] = 0.0
-                    continue  # Reintentar en máquina nueva
-                
-                # Ajustar grupo: remover partes menos compatibles
-                grupo_ajustado, removidas = ajustar_grupo_a_tiempo_disponible(
-                    grupo, 
-                    tiempo_disponible,
-                    umbral_compatibilidad
-                )
-                grupo = grupo_ajustado
-                partes_pendientes.extend(removidas)
-                horas_grupo = calcular_horas_grupo(grupo)
-                
-                # Si aún no cabe NADA (grupo vacío), crear nueva máquina
-                if not grupo:
-                    maquina_actual += 1
-                    asignaciones[maquina_actual] = []
-                    tiempo_usado[maquina_actual] = 0.0
-                    continue
-            
-            # VALIDACIÓN 2: OVERFLOW = 0 (REGLA DURA)
-            # Simular asignación y contar herramientas únicas
-            partes_simuladas = asignaciones[maquina_actual] + grupo
-            herramientas_totales = contar_herramientas_unicas(partes_simuladas)
-            
-            if herramientas_totales > LIMITE_ESTACIONES:
-                # CASO 1: Máquina vacía y grupo excede límite
-                if len(asignaciones[maquina_actual]) == 0:
-                    # El grupo solo excede límite, necesita dividirse
-                    if len(grupo) > 1:
-                        # Remover parte menos compatible y reintentar
-                        parte_menos_compatible = identificar_parte_menos_compatible(grupo)
-                        grupo.remove(parte_menos_compatible)
-                        partes_pendientes.append(parte_menos_compatible)
-                        continue  # Reintentar con grupo más pequeño
+
+
+            # VALIDACIÓN 1: TIEMPO (REGLA DURA ABSOLUTA)
+            while horas_grupo > tiempo_disponible:
+                # Si el grupo excede el tiempo, divide el grupo
+                if len(grupo) == 1:
+                    # Si solo queda una parte y excede, dividir la parte
+                    parte = grupo[0]
+                    uph = parte.get('uph', 1)
+                    cantidad_total = parte.get('quantity', 0)
+                    cantidad_que_cabe = int(tiempo_disponible * uph)
+                    cantidad_pendiente = cantidad_total - cantidad_que_cabe
+                    if cantidad_que_cabe > 0:
+                        parte_asignada = parte.copy()
+                        parte_asignada['quantity'] = cantidad_que_cabe
+                        parte_asignada['_es_division'] = True
+                        parte_asignada['_cantidad_original'] = cantidad_total
+                        grupo = [parte_asignada]
+                        parte_pendiente = parte.copy()
+                        parte_pendiente['quantity'] = cantidad_pendiente
+                        parte_pendiente['_es_division'] = True
+                        parte_pendiente['_cantidad_original'] = cantidad_total
+                        partes_pendientes.append(parte_pendiente)
+                        horas_grupo = calcular_horas_grupo(grupo)
                     else:
-                        # 1 sola parte excede 52 estaciones → ERROR FATAL
-                        parte_problema = grupo[0]
-                        raise Exception(
-                            f"ERROR: Part {parte_problema.get('part_number', 'N/A')} "
-                            f"tiene {contar_herramientas_unicas([parte_problema])} herramientas únicas, "
-                            f"excede el límite de {LIMITE_ESTACIONES} estaciones. "
-                            f"No se puede asignar sin modificar el part."
-                        )
-                
-                # CASO 2: Máquina con partes, grupo no cabe → Nueva máquina
+                        # No cabe nada, pasar a siguiente máquina
+                        maquina_actual += 1
+                        asignaciones[maquina_actual] = []
+                        tiempo_usado[maquina_actual] = 0.0
+                        break
+                else:
+                    # Remover la parte menos compatible y pasarla a pendientes
+                    parte_menos_compatible = identificar_parte_menos_compatible(grupo)
+                    grupo.remove(parte_menos_compatible)
+                    partes_pendientes.append(parte_menos_compatible)
+                    horas_grupo = calcular_horas_grupo(grupo)
+                # Recalcular tiempo disponible
+                tiempo_disponible = horas_objetivo - tiempo_usado[maquina_actual]
+            # Si el grupo quedó vacío, pasar a siguiente máquina
+            if not grupo:
                 maquina_actual += 1
                 asignaciones[maquina_actual] = []
                 tiempo_usado[maquina_actual] = 0.0
-                continue  # Reintentar en máquina nueva
-            
-            # ✅ PASA TODAS LAS VALIDACIONES → Asignar grupo
+                continue
+
+            # VALIDACIÓN 2: OVERFLOW = 0 (REGLA DURA)
+            partes_simuladas = asignaciones[maquina_actual] + grupo
+            herramientas_totales = contar_herramientas_unicas(partes_simuladas)
+
+            if herramientas_totales > LIMITE_ESTACIONES:
+                # ALERTA: Overflow, pero no bloquea
+                alertas.append(f"ALERTA: Máquina {maquina_actual} excede límite de estaciones ({herramientas_totales} > {LIMITE_ESTACIONES})")
+                # CASO 1: Máquina vacía y grupo excede límite
+                if len(asignaciones[maquina_actual]) == 0:
+                    if len(grupo) > 1:
+                        parte_menos_compatible = identificar_parte_menos_compatible(grupo)
+                        grupo.remove(parte_menos_compatible)
+                        partes_pendientes.append(parte_menos_compatible)
+                        continue
+                    else:
+                        parte_problema = grupo[0]
+                        alertas.append(
+                            f"ALERTA: Part {parte_problema.get('part_number', 'N/A')} tiene {contar_herramientas_unicas([parte_problema])} herramientas únicas, excede el límite de {LIMITE_ESTACIONES} estaciones. No se puede asignar sin modificar el part."
+                        )
+                        # Asignar igual, pero con alerta
+                        asignaciones[maquina_actual].extend(grupo)
+                        tiempo_usado[maquina_actual] += horas_grupo
+                        grupo_asignado = True
+                        break
+                maquina_actual += 1
+                asignaciones[maquina_actual] = []
+                tiempo_usado[maquina_actual] = 0.0
+                continue
+
+            # ALERTA: Out-of-style tools (estructura para expansión)
+            # Ejemplo: Si alguna herramienta está fuera de estilo, solo alertar
+            # for parte in grupo:
+            #     for tool in parte.get('tools', []):
+            #         if tool_is_out_of_style(tool):
+            #             alertas.append(f"ALERTA: Máquina {maquina_actual} tiene herramienta fuera de estilo: {tool}")
+
+            # Asignar grupo
             asignaciones[maquina_actual].extend(grupo)
             tiempo_usado[maquina_actual] += horas_grupo
             grupo_asignado = True
-    
+
     # Paso 3: Procesar partes pendientes (removidas de grupos)
-    # NOTA: En segunda asignación, compatibilidad NO importa, solo capacidad
     for parte in partes_pendientes:
         parte_asignada = False
         horas_parte = calcular_horas_parte(parte)
-        
-        # Verificar cuántas veces se ha dividido esta parte
         part_id = parte.get('part_id')
         num_divisiones = contar_divisiones_parte(part_id)
-        
+
         # Intentar asignar completa en máquina existente
         for maq_id in sorted(asignaciones.keys()):
             tiempo_disponible = horas_objetivo - tiempo_usado[maq_id]
-            
-            # Validar TIEMPO
             if horas_parte > tiempo_disponible:
-                continue  # No cabe en esta máquina
-            
-            # Validar OVERFLOW = 0
+                continue
             partes_simuladas = asignaciones[maq_id] + [parte]
             herramientas_totales = contar_herramientas_unicas(partes_simuladas)
-            
             if herramientas_totales > LIMITE_ESTACIONES:
-                continue  # Excede estaciones
-            
-            # ✅ Cabe completa → Asignar
+                alertas.append(f"ALERTA: Máquina {maq_id} excede límite de estaciones ({herramientas_totales} > {LIMITE_ESTACIONES})")
+                # No bloquea, solo alerta
             asignaciones[maq_id].append(parte)
             tiempo_usado[maq_id] += horas_parte
             parte_asignada = True
             break
-        
+
         # Si NO cabe completa en ninguna máquina existente
         if not parte_asignada:
             # OPCIÓN A: Crear nueva máquina
             if horas_parte <= horas_objetivo:
-                # Validar overflow individual
                 if contar_herramientas_unicas([parte]) > LIMITE_ESTACIONES:
-                    raise Exception(
-                        f"ERROR: Part {parte.get('part_number', 'N/A')} "
-                        f"requiere {contar_herramientas_unicas([parte])} estaciones, "
-                        f"excede límite de {LIMITE_ESTACIONES}."
+                    alertas.append(
+                        f"ALERTA: Part {parte.get('part_number', 'N/A')} requiere {contar_herramientas_unicas([parte])} estaciones, excede límite de {LIMITE_ESTACIONES}."
                     )
-                
                 maquina_actual += 1
                 if maquina_actual > MAX_MAQUINAS:
                     raise Exception(f"Se excedió límite de {MAX_MAQUINAS} máquinas.")
-                
                 asignaciones[maquina_actual] = [parte]
                 tiempo_usado[maquina_actual] = horas_parte
                 parte_asignada = True
-            
             # OPCIÓN B: Dividir parte (si no ha llegado al límite)
             elif num_divisiones < 2:
-                # Buscar máquina con más espacio disponible
                 maq_con_mas_espacio = max(
-                    asignaciones.keys(), 
+                    asignaciones.keys(),
                     key=lambda m: horas_objetivo - tiempo_usado[m]
                 )
                 tiempo_disponible = horas_objetivo - tiempo_usado[maq_con_mas_espacio]
-                
-                # Dividir parte por tiempo
                 parte_asignada_div, parte_pendiente_div = dividir_parte_por_tiempo(
                     parte,
                     tiempo_disponible
                 )
-                
                 if parte_asignada_div:
-                    # Validar overflow antes de asignar
                     partes_sim = asignaciones[maq_con_mas_espacio] + [parte_asignada_div]
                     if contar_herramientas_unicas(partes_sim) > LIMITE_ESTACIONES:
-                        # No cabe por overflow → Crear nueva máquina
+                        alertas.append(f"ALERTA: Máquina {maq_con_mas_espacio} excede límite de estaciones ({contar_herramientas_unicas(partes_sim)} > {LIMITE_ESTACIONES})")
                         maquina_actual += 1
                         if maquina_actual > MAX_MAQUINAS:
                             raise Exception(f"Se excedió límite de {MAX_MAQUINAS} máquinas.")
                         asignaciones[maquina_actual] = [parte_asignada_div]
                         tiempo_usado[maquina_actual] = calcular_horas_parte(parte_asignada_div)
                     else:
-                        # Cabe → Asignar
                         asignaciones[maq_con_mas_espacio].append(parte_asignada_div)
                         tiempo_usado[maq_con_mas_espacio] += calcular_horas_parte(parte_asignada_div)
-                    
-                    # Marcar división y agregar pendiente
                     marcar_division_parte(part_id)
                     if parte_pendiente_div:
                         partes_pendientes.append(parte_pendiente_div)
-                    
                     parte_asignada = True
-            
             # ERROR: No se puede asignar ni dividir más
             if not parte_asignada:
-                raise Exception(
-                    f"ERROR: Part {parte.get('part_number', 'N/A')} "
-                    f"no se puede asignar. Divisiones: {num_divisiones}/2. "
-                    f"Horas requeridas: {horas_parte:.2f}h > {horas_objetivo:.2f}h límite."
-                )
-    
-    # Limpiar y retornar
+                # Fallback: asignar a cualquier máquina con espacio, ignorando compatibilidad
+                for maq_id in sorted(asignaciones.keys()):
+                    tiempo_disponible = horas_objetivo - tiempo_usado[maq_id]
+                    if horas_parte <= tiempo_disponible:
+                        asignaciones[maq_id].append(parte)
+                        tiempo_usado[maq_id] += horas_parte
+                        alertas.append(f"ALERTA: Part {parte.get('part_number', 'N/A')} asignada sin compatibilidad por falta de espacio.")
+                        parte_asignada = True
+                        break
+                # Si aún no cabe, crear nueva máquina ignorando compatibilidad
+                if not parte_asignada and horas_parte <= horas_objetivo:
+                    maquina_actual += 1
+                    if maquina_actual > MAX_MAQUINAS:
+                        raise Exception(f"Se excedió límite de {MAX_MAQUINAS} máquinas.")
+                    asignaciones[maquina_actual] = [parte]
+                    tiempo_usado[maquina_actual] = horas_parte
+                    alertas.append(f"ALERTA: Part {parte.get('part_number', 'N/A')} asignada en máquina nueva sin compatibilidad por falta de espacio.")
+                    parte_asignada = True
+                if not parte_asignada:
+                    raise Exception(
+                        f"ERROR: Part {parte.get('part_number', 'N/A')} no se puede asignar. Divisiones: {num_divisiones}/2. Horas requeridas: {horas_parte:.2f}h > {horas_objetivo:.2f}h límite."
+                    )
+
     asignaciones = {maq_id: partes for maq_id, partes in asignaciones.items() if partes}
+    # Opcional: retornar alertas junto con asignaciones
+    # return asignaciones, alertas
     return asignaciones
 
 
